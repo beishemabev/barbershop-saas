@@ -1,73 +1,39 @@
-import NextAuth from 'next-auth';
-import authConfig from './auth.config.edge';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const { auth: authMiddleware } = NextAuth(authConfig);
+// Minimal Edge-safe middleware: cookie check only (no NextAuth — it crashes in Edge)
+const SESSION_COOKIE = 'authjs.session-token';
+const SESSION_COOKIE_SECURE = '__Secure-authjs.session-token';
 
-// ─── Route protection rules ───────────────────────────────────────────────────
-const PROTECTED_ROUTES = [
-  '/dashboard',
-  '/settings',
-  '/team',
-  '/pricing',
-];
+function hasSession(req: NextRequest) {
+  return req.cookies.has(SESSION_COOKIE) || req.cookies.has(SESSION_COOKIE_SECURE);
+}
 
-const OWNER_ONLY_ROUTES = ['/settings/team', '/settings/billing'];
-const ADMIN_AND_OWNER_ROUTES = ['/dashboard/analytics'];
+const PROTECTED_ROUTES = ['/dashboard', '/settings', '/team', '/pricing'];
 const AUTH_ROUTES = ['/sign-in', '/sign-up'];
 
-// ─── Middleware (uses Edge-safe auth.config, no db/adapter) ────────────────────
-export default authMiddleware((req: NextRequest & { auth: any }) => {
-  const { nextUrl, auth: session } = req as any;
-  const pathname = nextUrl.pathname;
-  const isLoggedIn = !!session?.user;
-  const userRole = session?.user?.role as string | undefined;
+export function middleware(req: NextRequest) {
+  const pathname = req.nextUrl.pathname;
+  const loggedIn = hasSession(req);
 
-  // 1. Redirect authenticated users away from auth pages
-  if (isLoggedIn && AUTH_ROUTES.some((r) => pathname.startsWith(r))) {
-    return NextResponse.redirect(new URL('/dashboard', nextUrl));
+  if (loggedIn && AUTH_ROUTES.some((r) => pathname.startsWith(r))) {
+    return NextResponse.redirect(new URL('/dashboard', req.url));
   }
-
-  // 2. Protect routes — redirect to sign-in if not authenticated
-  if (PROTECTED_ROUTES.some((r) => pathname.startsWith(r)) && !isLoggedIn) {
-    const signInUrl = new URL('/sign-in', nextUrl);
-    signInUrl.searchParams.set('callbackUrl', pathname);
-    return NextResponse.redirect(signInUrl);
+  if (!loggedIn && PROTECTED_ROUTES.some((r) => pathname.startsWith(r))) {
+    const signIn = new URL('/sign-in', req.url);
+    signIn.searchParams.set('callbackUrl', pathname);
+    return NextResponse.redirect(signIn);
   }
-
-  // 3. Owner-only routes
-  if (OWNER_ONLY_ROUTES.some((r) => pathname.startsWith(r))) {
-    if (!isLoggedIn) {
-      return NextResponse.redirect(new URL('/sign-in', nextUrl));
-    }
-    if (userRole !== 'owner') {
-      return NextResponse.redirect(new URL('/dashboard?error=forbidden', nextUrl));
-    }
-  }
-
-  // 4. Admin + Owner routes
-  if (ADMIN_AND_OWNER_ROUTES.some((r) => pathname.startsWith(r))) {
-    if (!isLoggedIn) {
-      return NextResponse.redirect(new URL('/sign-in', nextUrl));
-    }
-    if (userRole !== 'owner' && userRole !== 'admin') {
-      return NextResponse.redirect(new URL('/dashboard?error=forbidden', nextUrl));
-    }
-  }
-
-  // 5. Protect API routes (except auth and webhooks)
   if (
     pathname.startsWith('/api/') &&
     !pathname.startsWith('/api/auth') &&
-    !pathname.startsWith('/api/webhooks') &&
-    !isLoggedIn
+    !pathname.includes('webhook') &&
+    !loggedIn
   ) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: [
