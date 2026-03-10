@@ -11,14 +11,14 @@ export default {
   pages: { signIn: '/sign-in', error: '/sign-in', newUser: '/dashboard' },
   providers: [],
   callbacks: {
-    jwt({ token, user }) {
+    jwt({ token, user }: { token: any; user?: any }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as any).role ?? 'owner';
+        token.role = user.role ?? 'owner';
       }
       return token;
     },
-    session({ session, token }) {
+    session({ session, token }: { session: any; token: any }) {
       if (token && session.user) {
         session.user.id = token.id as string;
         session.user.role = (token.role as UserRole) ?? 'owner';
