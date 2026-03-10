@@ -37,20 +37,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
 
   providers: [
-    // ── Google OAuth ──────────────────────────────────────────────────────────
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      profile(profile) {
-        return {
-          id: profile.sub,
-          name: profile.name,
-          email: profile.email,
-          image: profile.picture,
-          role: 'owner' as UserRole, // новые OAuth пользователи — owner по умолчанию
-        };
-      },
-    }),
+    // ── Google OAuth (optional, if env vars set) ─────────────────────────────
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [
+          Google({
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            profile(profile) {
+              return {
+                id: profile.sub,
+                name: profile.name,
+                email: profile.email,
+                image: profile.picture,
+                role: 'owner' as UserRole,
+              };
+            },
+          }),
+        ]
+      : []),
 
     // ── Email + Password ──────────────────────────────────────────────────────
     Credentials({
