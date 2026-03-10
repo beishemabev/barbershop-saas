@@ -7,7 +7,11 @@ import {
   updateTeamSubscription
 } from '@/lib/db/queries';
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+// Placeholder during build when STRIPE_SECRET_KEY is missing (Vercel env not set yet)
+const stripeKey =
+  process.env.STRIPE_SECRET_KEY ||
+  'sk_test_000000000000000000000000000000000000000000000000000000000000';
+export const stripe = new Stripe(stripeKey, {
   apiVersion: '2025-04-30.basil'
 });
 
@@ -147,36 +151,45 @@ export async function handleSubscriptionChange(
 }
 
 export async function getStripePrices() {
-  const prices = await stripe.prices.list({
-    expand: ['data.product'],
-    active: true,
-    type: 'recurring'
-  });
-
-  return prices.data.map((price) => ({
-    id: price.id,
-    productId:
-      typeof price.product === 'string' ? price.product : price.product.id,
-    unitAmount: price.unit_amount,
-    currency: price.currency,
-    interval: price.recurring?.interval,
-    trialPeriodDays: price.recurring?.trial_period_days
-  }));
+  if (!process.env.STRIPE_SECRET_KEY) return [];
+  try {
+    const prices = await stripe.prices.list({
+      expand: ['data.product'],
+      active: true,
+      type: 'recurring'
+    });
+    return prices.data.map((price) => ({
+      id: price.id,
+      productId:
+        typeof price.product === 'string' ? price.product : price.product.id,
+      unitAmount: price.unit_amount,
+      currency: price.currency,
+      interval: price.recurring?.interval,
+      trialPeriodDays: price.recurring?.trial_period_days
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function getStripeProducts() {
-  const products = await stripe.products.list({
+  if (!process.env.STRIPE_SECRET_KEY) return [];
+  try {
+    const products = await stripe.products.list({
     active: true,
     expand: ['data.default_price']
   });
 
-  return products.data.map((product) => ({
-    id: product.id,
-    name: product.name,
-    description: product.description,
-    defaultPriceId:
-      typeof product.default_price === 'string'
-        ? product.default_price
-        : product.default_price?.id
-  }));
+    return products.data.map((product) => ({
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      defaultPriceId:
+        typeof product.default_price === 'string'
+          ? product.default_price
+          : product.default_price?.id
+    }));
+  } catch {
+    return [];
+  }
 }
