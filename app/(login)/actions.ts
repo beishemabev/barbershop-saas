@@ -5,6 +5,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   User,
+  type UserRole,
   users,
   teams,
   teamMembers,
@@ -28,7 +29,7 @@ import {
 
 async function logActivity(
   teamId: number | null | undefined,
-  userId: number,
+  userId: string,
   type: ActivityType,
   ipAddress?: string
 ) {
@@ -72,6 +73,10 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   }
 
   const { user: foundUser, team: foundTeam } = userWithTeam[0];
+
+  if (!foundUser.passwordHash) {
+    return { error: 'Invalid email or password. Please try again.', email, password };
+  }
 
   const isPasswordValid = await comparePasswords(
     password,
@@ -142,7 +147,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   }
 
   let teamId: number;
-  let userRole: string;
+  let userRole: UserRole;
   let createdTeam: typeof teams.$inferSelect | null = null;
 
   if (inviteId) {
@@ -239,6 +244,10 @@ export const updatePassword = validatedActionWithUser(
   async (data, _, user) => {
     const { currentPassword, newPassword, confirmPassword } = data;
 
+    if (!user.passwordHash) {
+      return { currentPassword, newPassword, confirmPassword, error: 'Current password is incorrect.' };
+    }
+
     const isPasswordValid = await comparePasswords(
       currentPassword,
       user.passwordHash
@@ -297,7 +306,7 @@ export const deleteAccount = validatedActionWithUser(
   async (data, _, user) => {
     const { password } = data;
 
-    const isPasswordValid = await comparePasswords(password, user.passwordHash);
+    const isPasswordValid = user.passwordHash ? await comparePasswords(password, user.passwordHash) : false;
     if (!isPasswordValid) {
       return {
         password,
@@ -393,7 +402,7 @@ export const removeTeamMember = validatedActionWithUser(
 
 const inviteTeamMemberSchema = z.object({
   email: z.string().email('Invalid email address'),
-  role: z.enum(['member', 'owner'])
+  role: z.enum(['owner', 'admin', 'viewer'])
 });
 
 export const inviteTeamMember = validatedActionWithUser(

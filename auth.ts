@@ -73,13 +73,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           .where(eq(users.email, email))
           .limit(1);
 
-        if (!user || !user.password) return null;
+        if (!user || !user.passwordHash) return null;
 
         // 3. Check soft-delete
         if (user.deletedAt) return null;
 
         // 4. Verify password
-        const isValid = await bcrypt.compare(password, user.password);
+        const isValid = await bcrypt.compare(password, user.passwordHash);
         if (!isValid) return null;
 
         return {

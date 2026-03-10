@@ -77,7 +77,7 @@ export async function registerOwner(
         .values({
           name,
           email,
-          password: hashedPassword,
+          passwordHash: hashedPassword,
           role: 'owner',
         })
         .returning({ id: users.id });
