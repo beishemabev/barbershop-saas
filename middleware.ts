@@ -1,5 +1,5 @@
 import NextAuth from 'next-auth';
-import authConfig from '@/auth.config';
+import authConfig from './auth.config.edge';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
