@@ -127,6 +127,20 @@ export const invitations = pgTable('invitations', {
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
 
+// ─── Activity Type Enum ──────────────────────────────────────────────────────
+export enum ActivityType {
+  SIGN_UP = 'SIGN_UP',
+  SIGN_IN = 'SIGN_IN',
+  SIGN_OUT = 'SIGN_OUT',
+  UPDATE_PASSWORD = 'UPDATE_PASSWORD',
+  DELETE_ACCOUNT = 'DELETE_ACCOUNT',
+  UPDATE_ACCOUNT = 'UPDATE_ACCOUNT',
+  CREATE_TEAM = 'CREATE_TEAM',
+  REMOVE_TEAM_MEMBER = 'REMOVE_TEAM_MEMBER',
+  INVITE_TEAM_MEMBER = 'INVITE_TEAM_MEMBER',
+  ACCEPT_INVITATION = 'ACCEPT_INVITATION',
+}
+
 // ─── Type exports ─────────────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -135,4 +149,5 @@ export type NewTeam = typeof teams.$inferInsert;
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type NewTeamMember = typeof teamMembers.$inferInsert;
 export type ActivityLog = typeof activityLogs.$inferSelect;
+export type NewActivityLog = typeof activityLogs.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;
