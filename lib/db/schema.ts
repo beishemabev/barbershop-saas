@@ -5,20 +5,76 @@ import {
   text,
   timestamp,
   integer,
+  boolean,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import type { AdapterAccountType } from 'next-auth/adapters';
 
+// ─── Roles ────────────────────────────────────────────────────────────────────
+export type UserRole = 'owner' | 'admin' | 'viewer';
+
+// ─── Users ────────────────────────────────────────────────────────────────────
 export const users = pgTable('users', {
-  id: serial('id').primaryKey(),
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
   name: varchar('name', { length: 100 }),
   email: varchar('email', { length: 255 }).notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
-  role: varchar('role', { length: 20 }).notNull().default('member'),
+  emailVerified: timestamp('email_verified', { mode: 'date' }),
+  image: text('image'),
+  password: text('password'), // null for OAuth-only users
+  role: varchar('role', { length: 20 }).notNull().default('owner').$type<UserRole>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at'),
 });
 
+// ─── Accounts (OAuth) ────────────────────────────────────────────────────────
+export const accounts = pgTable(
+  'accounts',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').$type<AdapterAccountType>().notNull(),
+    provider: text('provider').notNull(),
+    providerAccountId: text('provider_account_id').notNull(),
+    refresh_token: text('refresh_token'),
+    access_token: text('access_token'),
+    expires_at: integer('expires_at'),
+    token_type: text('token_type'),
+    scope: text('scope'),
+    id_token: text('id_token'),
+    session_state: text('session_state'),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.provider, table.providerAccountId] }),
+  }),
+);
+
+// ─── Sessions ─────────────────────────────────────────────────────────────────
+export const sessions = pgTable('sessions', {
+  sessionToken: text('session_token').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  expires: timestamp('expires', { mode: 'date' }).notNull(),
+});
+
+// ─── Verification Tokens (Magic Link / Email verify) ──────────────────────────
+export const verificationTokens = pgTable(
+  'verification_tokens',
+  {
+    identifier: text('identifier').notNull(),
+    token: text('token').notNull(),
+    expires: timestamp('expires', { mode: 'date' }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.identifier, table.token] }),
+  }),
+);
+
+// ─── Teams (Barbershops) ───────────────────────────────────────────────────────
 export const teams = pgTable('teams', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 100 }).notNull(),
@@ -31,87 +87,47 @@ export const teams = pgTable('teams', {
   subscriptionStatus: varchar('subscription_status', { length: 20 }),
 });
 
+// ─── Team Members ─────────────────────────────────────────────────────────────
 export const teamMembers = pgTable('team_members', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id')
+  userId: text('user_id')
     .notNull()
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: 'cascade' }),
   teamId: integer('team_id')
     .notNull()
-    .references(() => teams.id),
-  role: varchar('role', { length: 50 }).notNull(),
+    .references(() => teams.id, { onDelete: 'cascade' }),
+  role: varchar('role', { length: 20 }).notNull().default('owner').$type<UserRole>(),
   joinedAt: timestamp('joined_at').notNull().defaultNow(),
 });
 
+// ─── Activity Logs ────────────────────────────────────────────────────────────
 export const activityLogs = pgTable('activity_logs', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id')
     .notNull()
-    .references(() => teams.id),
-  userId: integer('user_id').references(() => users.id),
+    .references(() => teams.id, { onDelete: 'cascade' }),
+  userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
   action: text('action').notNull(),
   timestamp: timestamp('timestamp').notNull().defaultNow(),
   ipAddress: varchar('ip_address', { length: 45 }),
 });
 
+// ─── Invitations ──────────────────────────────────────────────────────────────
 export const invitations = pgTable('invitations', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id')
     .notNull()
-    .references(() => teams.id),
+    .references(() => teams.id, { onDelete: 'cascade' }),
   email: varchar('email', { length: 255 }).notNull(),
-  role: varchar('role', { length: 50 }).notNull(),
-  invitedBy: integer('invited_by')
+  role: varchar('role', { length: 20 }).notNull().default('admin').$type<UserRole>(),
+  invitedBy: text('invited_by')
     .notNull()
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: 'cascade' }),
   invitedAt: timestamp('invited_at').notNull().defaultNow(),
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
 
-export const teamsRelations = relations(teams, ({ many }) => ({
-  teamMembers: many(teamMembers),
-  activityLogs: many(activityLogs),
-  invitations: many(invitations),
-}));
-
-export const usersRelations = relations(users, ({ many }) => ({
-  teamMembers: many(teamMembers),
-  invitationsSent: many(invitations),
-}));
-
-export const invitationsRelations = relations(invitations, ({ one }) => ({
-  team: one(teams, {
-    fields: [invitations.teamId],
-    references: [teams.id],
-  }),
-  invitedBy: one(users, {
-    fields: [invitations.invitedBy],
-    references: [users.id],
-  }),
-}));
-
-export const teamMembersRelations = relations(teamMembers, ({ one }) => ({
-  user: one(users, {
-    fields: [teamMembers.userId],
-    references: [users.id],
-  }),
-  team: one(teams, {
-    fields: [teamMembers.teamId],
-    references: [teams.id],
-  }),
-}));
-
-export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
-  team: one(teams, {
-    fields: [activityLogs.teamId],
-    references: [teams.id],
-  }),
-  user: one(users, {
-    fields: [activityLogs.userId],
-    references: [users.id],
-  }),
-}));
-
+// ─── Type exports ─────────────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Team = typeof teams.$inferSelect;
@@ -119,24 +135,4 @@ export type NewTeam = typeof teams.$inferInsert;
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type NewTeamMember = typeof teamMembers.$inferInsert;
 export type ActivityLog = typeof activityLogs.$inferSelect;
-export type NewActivityLog = typeof activityLogs.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;
-export type NewInvitation = typeof invitations.$inferInsert;
-export type TeamDataWithMembers = Team & {
-  teamMembers: (TeamMember & {
-    user: Pick<User, 'id' | 'name' | 'email'>;
-  })[];
-};
-
-export enum ActivityType {
-  SIGN_UP = 'SIGN_UP',
-  SIGN_IN = 'SIGN_IN',
-  SIGN_OUT = 'SIGN_OUT',
-  UPDATE_PASSWORD = 'UPDATE_PASSWORD',
-  DELETE_ACCOUNT = 'DELETE_ACCOUNT',
-  UPDATE_ACCOUNT = 'UPDATE_ACCOUNT',
-  CREATE_TEAM = 'CREATE_TEAM',
-  REMOVE_TEAM_MEMBER = 'REMOVE_TEAM_MEMBER',
-  INVITE_TEAM_MEMBER = 'INVITE_TEAM_MEMBER',
-  ACCEPT_INVITATION = 'ACCEPT_INVITATION',
-}
