@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import type { UserRole } from '@/lib/db/schema';
+import authConfig from './auth.config';
 
 // ─── Validation schema for credentials ───────────────────────────────────────
 const credentialsSchema = z.object({
@@ -15,8 +16,9 @@ const credentialsSchema = z.object({
   password: z.string().min(8),
 });
 
-// ─── NextAuth config ──────────────────────────────────────────────────────────
+// ─── NextAuth config (extends Edge-safe auth.config with adapter + Credentials) ─
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authConfig,
   adapter: DrizzleAdapter(db, {
     usersTable: users,
     accountsTable: accounts,
@@ -24,39 +26,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     verificationTokensTable: verificationTokens,
   }),
 
-  // JWT strategy — оптимально для Vercel serverless
-  session: {
-    strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-  },
-
-  pages: {
-    signIn: '/sign-in',
-    error: '/sign-in',
-    newUser: '/dashboard',
-  },
-
   providers: [
-    // ── Google OAuth (optional, if env vars set) ─────────────────────────────
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-      ? [
-          Google({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            profile(profile) {
-              return {
-                id: profile.sub,
-                name: profile.name,
-                email: profile.email,
-                image: profile.picture,
-                role: 'owner' as UserRole,
-              };
-            },
-          }),
-        ]
-      : []),
-
-    // ── Email + Password ──────────────────────────────────────────────────────
+    ...(authConfig.providers as any),
+    // ── Email + Password (Node-only, not in auth.config) ──────────────────────
     Credentials({
       name: 'credentials',
       credentials: {

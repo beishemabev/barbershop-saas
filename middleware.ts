@@ -1,28 +1,24 @@
-import { auth } from '@/auth';
+import NextAuth from 'next-auth';
+import authConfig from '@/auth.config';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+
+const { auth: authMiddleware } = NextAuth(authConfig);
 
 // ─── Route protection rules ───────────────────────────────────────────────────
 const PROTECTED_ROUTES = [
   '/dashboard',
   '/settings',
   '/team',
-  '/pricing',  // требует авторизации для управления подпиской
+  '/pricing',
 ];
 
-const OWNER_ONLY_ROUTES = [
-  '/settings/team',
-  '/settings/billing',
-];
-
-const ADMIN_AND_OWNER_ROUTES = [
-  '/dashboard/analytics',
-];
-
+const OWNER_ONLY_ROUTES = ['/settings/team', '/settings/billing'];
+const ADMIN_AND_OWNER_ROUTES = ['/dashboard/analytics'];
 const AUTH_ROUTES = ['/sign-in', '/sign-up'];
 
-// ─── Middleware ───────────────────────────────────────────────────────────────
-export default auth((req: NextRequest & { auth: any }) => {
+// ─── Middleware (uses Edge-safe auth.config, no db/adapter) ────────────────────
+export default authMiddleware((req: NextRequest & { auth: any }) => {
   const { nextUrl, auth: session } = req as any;
   const pathname = nextUrl.pathname;
   const isLoggedIn = !!session?.user;
