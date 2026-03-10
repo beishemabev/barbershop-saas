@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useActionState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -10,7 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { loginWithCredentials, loginWithGoogle } from '@/lib/auth/actions';
 import { Scissors } from 'lucide-react';
 
-export default function SignInPage() {
+function SignInContent() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
   const error = searchParams.get('error');
@@ -123,5 +124,27 @@ export default function SignInPage() {
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <div className="flex justify-center mb-2">
+                <Scissors className="h-8 w-8 text-zinc-900" />
+              </div>
+              <CardTitle className="text-2xl">Вход в BarberShop SaaS</CardTitle>
+              <CardDescription>Загрузка...</CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      }
+    >
+      <SignInContent />
+    </Suspense>
   );
 }
