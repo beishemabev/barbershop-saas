@@ -5,10 +5,26 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-if (!process.env.POSTGRES_URL) {
-  throw new Error('POSTGRES_URL environment variable is not set');
+// Lazy database initialization to avoid build-time errors
+let dbInstance: ReturnType<typeof drizzle> | null = null;
+
+function initDb() {
+  if (!process.env.POSTGRES_URL) {
+    throw new Error('POSTGRES_URL environment variable is not set');
+  }
+  
+  if (!dbInstance) {
+    const sql = neon(process.env.POSTGRES_URL);
+    dbInstance = drizzle(sql, { schema });
+  }
+  
+  return dbInstance;
 }
 
-// Neon serverless driver — works in Edge (middleware) and Node.js
-const sql = neon(process.env.POSTGRES_URL);
-export const db = drizzle(sql, { schema });
+// Export a proxy that initializes on first access
+export const db = new Proxy({} as ReturnType<typeof drizzle>, {
+  get(target, prop) {
+    const instance = initDb();
+    return (instance as any)[prop];
+  }
+});
